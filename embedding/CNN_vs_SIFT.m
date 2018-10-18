@@ -1,0 +1,111 @@
+%% Load Data
+
+%If you run this on the Messiah these paths should be fine.
+ImageMasterPath = 'D:\ABA\images\master\ImageMaster.mat';
+CNNEmbeddingPath = 'D:\METHODS_PAPER\embedding\data\NewCNNembedding.mat';
+SIFTEmbeddingPath = 'D:\METHODS_PAPER\embedding\data\SIFTembedding.mat';
+
+load(ImageMasterPath)
+load(CNNEmbeddingPath)
+CNNembedding = embedding;
+load(SIFTEmbeddingPath)
+SIFTembedding = embedding;
+
+%% Choose Comparison Image and find in both embeddings
+
+numim = 100; % Number of random images
+images = datasample(ImageMaster(:,2),numim,'Replace',false); %Pick random images
+
+for k = 1:numel(images)
+    
+    disp(k) % See where the loop is
+    
+    %% Find the ImageMaster index and then CNN and SIFT coordinates of a seed image
+    Image = images{k};
+    ImageIdx = find(ismember(ImageMaster(:,2),Image));
+
+    CNNpt = CNNembedding(ImageIdx,:);
+    SIFTpt = SIFTembedding(ImageIdx,:);
+
+    %% Find closest images 
+
+    NumIm = 200;    %Number of nearest neighbors to a seed image
+
+    CNNdists = ((CNNembedding(:,1)-CNNpt(1)).^2 + (CNNembedding(:,2)-CNNpt(2)).^2).^0.5;
+    SIFTdists = ((SIFTembedding(:,1)-SIFTpt(1)).^2 + (SIFTembedding(:,2)-SIFTpt(2)).^2).^0.5;
+
+    [~,CNNidx] = sort(CNNdists);
+    [~,SIFTidx] = sort(SIFTdists);
+
+    CNNimages = ImageMaster(CNNidx(1:NumIm),3);     %Images lists
+    SIFTimages = ImageMaster(SIFTidx(1:NumIm),3);
+
+    %% Load Images 
+    NumIm = 200;
+    CNNimstack = zeros(480,480,3,NumIm);
+    SIFTimstack = zeros(480,480,3,NumIm);
+
+    for i = 1:NumIm
+        im = imread(CNNimages{i});
+        im = imresize(im,[480 480]);
+        im = im2double(im);
+        CNNimstack(:,:,:,i) = im;
+
+        im = imread(SIFTimages{i});
+        im = imresize(im,[480 480]);
+        im = im2double(im);
+        SIFTimstack(:,:,:,i) = im;
+    end
+
+    %figure, montage(CNNimstack)  %Use these lines to make montages
+    %figure, montage(SIFTimstack)
+
+    %% Compute Simiarlity 
+
+    CNNsimilarity = zeros(NumIm,1);
+    SIFTsimilarity = zeros(NumIm,1);
+
+    for j = 1:NumIm
+
+       CNNsimilarityMI(j)  = mirt_MI( CNNimstack(:,:,:,1), CNNimstack(:,:,:,j),5 ); 
+       SIFTsimilarityMI(j)  = mirt_MI( SIFTimstack(:,:,:,1), SIFTimstack(:,:,:,j),5); 
+
+       CNNsimilaritySSD(j)  = aba_ssd( CNNimstack(:,:,:,1), CNNimstack(:,:,:,j) ); 
+       SIFTsimilaritySSD(j)  = aba_ssd( SIFTimstack(:,:,:,1), SIFTimstack(:,:,:,j)); 
+    end
+
+    %% Output 
+    
+    %The results for a single seed image are stored in the struct made
+    %below and then added to the cell array called Comparisons with all the
+    %other seed image results.
+    
+    CNNvsSIFTresults.SeedImage = Image;
+    CNNvsSIFTresults.CNNimages = CNNimages;
+    CNNvsSIFTresults.SIFTimages = SIFTimages;
+    CNNvsSIFTresults.CNNsimilarityMI = CNNsimilarityMI;
+    CNNvsSIFTresults.SIFTsimilarityMI = SIFTsimilarityMI;
+    CNNvsSIFTresults.CNNsimilaritySSD = CNNsimilaritySSD;
+    CNNvsSIFTresults.SIFTsimilaritySSD = SIFTsimilaritySSD;
+
+    Comparisons{k} = CNNvsSIFTresults;
+end
+
+
+
+%% Look at mean similarity values for CNN and SIFT
+MImeans = zeros(numim,2);
+SSDmeans = zeros(numim,2);
+for g = 1:numim
+    
+    MImeans(g,1) = mean(Comparisons{g}.CNNsimilarityMI);
+    MImeans(g,2) = mean(Comparisons{g}.SIFTsimilarityMI);
+    
+    SSDmeans(g,1) = mean(Comparisons{g}.CNNsimilaritySSD);
+    SSDmeans(g,2) = mean(Comparisons{g}.SIFTsimilaritySSD);
+    
+  
+end
+
+
+
